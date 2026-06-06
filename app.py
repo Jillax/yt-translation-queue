@@ -33,6 +33,20 @@ from llm_segment import segment_transcript, simple_segment
 from config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, LLM_MAX_CHARS_PER_LINE
 import subprocess
 import json as json_lib
+import asyncio
+
+# B站上传模块（可选依赖）
+try:
+    from bilibili_uploader import upload_video as bilibili_upload, generate_title_desc, get_credential
+    HAS_BILIBILI = True
+except ImportError:
+    HAS_BILIBILI = False
+    def bilibili_upload(**kwargs):
+        return {"success": False, "bvid": "", "message": "bilibili-api-python 未安装，请运行: pip install bilibili-api-python"}
+    def generate_title_desc(cn_title, channel, en_title="", youtube_url=""):
+        return f"[双语] {cn_title} | {channel}", ""
+    def get_credential():
+        return None
 
 app = Flask(__name__)
 app.secret_key = "yt-translation-queue-secret-key"
@@ -631,6 +645,62 @@ def api_download_subtitle(video_db_id):
             return jsonify({"error": f"字幕下载失败: {result.stderr[:300]}"}), 500
     except FileNotFoundError:
         return jsonify({"error": "yt-dlp 未安装"}), 500
+
+
+# === B站上传 API ===
+
+@app.route("/api/video/<int:video_db_id>/upload-bilibili", methods=["POST"])
+def api_upload_bilibili(video_db_id):
+    """上传视频到 B站"""
+    video = get_video(video_db_id)
+    if not video:
+        return jsonify({"error": "视频不存在"}), 404
+
+    data = request.get_json() or {}
+    video_path = data.get("video_path", "")
+    cover_path = data.get("cover_path", "")
+    cover_url = data.get("cover_url", video.get("thumbnail_url", ""))
+    cn_title = data.get("title", video.get("title", ""))
+    tid = data.get("tid", 36)
+    only_self = data.get("only_self", False)
+    custom_tags = data.get("tags", "")
+
+    if not video_path:
+        return jsonify({"error": "请指定视频文件路径"}), 400
+
+    # 生成标题和简介
+    youtube_url = f"https://www.youtube.com/watch?v={video['video_id']}"
+    title, desc = generate_title_desc(
+        cn_title=cn_title,
+        channel=video.get("channel_name", ""),
+        en_title=video.get("title", ""),
+        youtube_url=youtube_url,
+    )
+
+    tags = [t.strip() for t in custom_tags.split(",") if t.strip()] if custom_tags else None
+
+    try:
+        result = asyncio.run(bilibili_upload(
+            video_path=video_path,
+            title=title,
+            description=desc,
+            tags=tags,
+            tid=tid,
+            source_url=youtube_url,
+            cover_path=cover_path,
+            cover_url=cover_url,
+            only_self=only_self,
+        ))
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": f"上传失败: {str(e)[:300]}"}), 500
+
+
+@app.route("/api/bilibili/check-credential")
+def api_check_bilibili_credential():
+    """检查 B站凭证是否配置"""
+    cred = get_credential()
+    return jsonify({"configured": cred is not None})
 
 
 # === 统计 API ===
