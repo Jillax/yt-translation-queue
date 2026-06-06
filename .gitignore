@@ -32,3 +32,6 @@ desktop.ini
 # Env
 .env
 *.env
+
+# Setup scripts
+_setup_github.py
