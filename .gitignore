@@ -34,9 +34,11 @@ desktop.ini
 *.env
 config.json
 
-# Setup scripts
+# Setup/test scripts
 _setup_github.py
 _copy_helper.py
+_test_llm.py
+_test_model.py
 
 # Downloads
 downloads/

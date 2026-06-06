@@ -38,22 +38,24 @@ def segment_transcript(transcript_text, max_chars=None, api_key=None, base_url=N
     # 清理时间戳格式，保留 [mm:ss] 格式
     clean_text = _preprocess_transcript(transcript_text)
 
-    prompt = f"""You are a subtitle editor. Your task is to re-segment the following English transcript for subtitle display.
+    # 截断过长的文本避免 API 超时
+    if len(clean_text) > 6000:
+        clean_text = clean_text[:6000]
+
+    prompt = f"""You are a subtitle editor. Re-segment the following transcript for subtitle display.
 
 RULES:
-1. Each subtitle line should be AT MOST {max_chars} English characters (including spaces and punctuation).
-2. Break at natural sentence boundaries (commas, conjunctions, prepositions, clause boundaries).
-3. Each line must be grammatically meaningful - don't break mid-phrase.
-4. Preserve the [mm:ss] timestamps. If a sentence spans multiple original timestamps, use the earliest timestamp.
-5. Output format: each line = "[mm:ss] subtitle text", one per line.
-6. Do NOT add any commentary, just output the subtitle lines.
+1. Each line AT MOST {max_chars} characters.
+2. Break at natural sentence boundaries.
+3. Preserve [mm:ss] timestamps. Use earliest timestamp if merging.
+4. Output ONLY subtitle lines, no commentary.
 
 TRANSCRIPT:
-{clean_text[:8000]}"""
+{clean_text}"""
 
     try:
         resp = requests.post(
-            f"{url}/chat/completions",
+            f"{url.rstrip('/')}/chat/completions",
             headers={
                 "Authorization": f"Bearer {key}",
                 "Content-Type": "application/json",
@@ -67,8 +69,12 @@ TRANSCRIPT:
                 "temperature": 0.3,
                 "max_tokens": 4096,
             },
-            timeout=120,
+            timeout=180,
         )
+        
+        if resp.status_code != 200:
+            return {"success": False, "error": f"LLM API 返回错误 {resp.status_code}: {resp.text[:300]}"}
+        
         resp.raise_for_status()
         data = resp.json()
 

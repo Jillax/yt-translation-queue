@@ -139,7 +139,7 @@
                                     <div class="col-6">
                                         <label class="form-label small">模型名称</label>
                                         <input type="text" class="form-control form-control-sm" id="llmModel" 
-                                               value="gpt-4o-mini" placeholder="模型名">
+                                               value="mimo-v2.5-pro" placeholder="模型名">
                                     </div>
                                 </div>
                             </div>
@@ -383,10 +383,28 @@
             if (model) body.model = model;
         }
 
-        const data = await apiCall(`/api/video/${videoId}/segment`, {
-            method: 'POST',
-            body: JSON.stringify(body),
-        });
+        let data;
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 200000); // 200秒超时
+            const resp = await fetch(`/api/video/${videoId}/segment`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+                signal: controller.signal,
+            });
+            clearTimeout(timeoutId);
+            data = await resp.json();
+        } catch (e) {
+            loading.style.display = 'none';
+            btn.disabled = false;
+            if (e.name === 'AbortError') {
+                showToast('LLM 请求超时（200秒），请稍后重试或使用简单断句', 'error');
+            } else {
+                showToast('请求失败: ' + e.message, 'error');
+            }
+            return;
+        }
 
         loading.style.display = 'none';
         btn.disabled = false;

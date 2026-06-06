@@ -44,7 +44,7 @@ TRANSLATION_STATUSES = [
 # === LLM 配置（OpenAI 兼容 API） ===
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "tp-c58etypj3tga8i9b3dyc53oioy3enww0izd1asxeeio5m7kx")
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://token-plan-cn.xiaomimimo.com/v1")
-LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o-mini")
+LLM_MODEL = os.environ.get("LLM_MODEL", "mimo-v2.5-pro")
 LLM_MAX_CHARS_PER_LINE = int(os.environ.get("LLM_MAX_CHARS", "24"))
 
 # === 应用配置 ===
