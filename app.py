@@ -29,6 +29,8 @@ from youtube_scraper import (
     search_videos, get_transcript, get_transcript_srt,
     get_channel_info_api, get_channel_videos_api
 )
+from llm_segment import segment_transcript, simple_segment
+from config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, LLM_MAX_CHARS_PER_LINE
 
 app = Flask(__name__)
 app.secret_key = "yt-translation-queue-secret-key"
@@ -277,6 +279,75 @@ def api_get_transcript(video_db_id):
         # 保存到数据库
         update_video_subtitle(video_db_id, result["timestamped"])
     return jsonify(result)
+
+
+@app.route("/api/video/<int:video_db_id>/segment", methods=["POST"])
+def api_segment_transcript(video_db_id):
+    """LLM 智能断句"""
+    video = get_video(video_db_id)
+    if not video:
+        return jsonify({"error": "视频不存在"}), 404
+
+    if not video.get("subtitle_text"):
+        return jsonify({"error": "请先获取字幕再进行断句"}), 400
+
+    data = request.get_json() or {}
+    max_chars = data.get("max_chars", LLM_MAX_CHARS_PER_LINE)
+    use_llm = data.get("use_llm", True)
+    api_key = data.get("api_key", "").strip() or None
+    base_url = data.get("base_url", "").strip() or None
+    model = data.get("model", "").strip() or None
+
+    if use_llm:
+        result = segment_transcript(
+            video["subtitle_text"],
+            max_chars=max_chars,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+        )
+    else:
+        result = {
+            "success": True,
+            "segmented": simple_segment(video["subtitle_text"], max_chars=max_chars),
+            "lines_count": 0,
+            "max_chars": max_chars,
+            "model": "simple",
+        }
+
+    return jsonify(result)
+
+
+@app.route("/api/video/<int:video_db_id>/segment/save", methods=["POST"])
+def api_save_segmented(video_db_id):
+    """保存断句后的字幕"""
+    data = request.get_json() or {}
+    segmented_text = data.get("text", "")
+    if not segmented_text:
+        return jsonify({"error": "没有要保存的内容"}), 400
+
+    update_video_subtitle(video_db_id, segmented_text)
+    return jsonify({"success": True})
+
+
+@app.route("/api/video/<int:video_db_id>/segment/export")
+def api_export_segmented(video_db_id):
+    """导出断句后的字幕为文本文件"""
+    video = get_video(video_db_id)
+    if not video:
+        return jsonify({"error": "视频不存在"}), 404
+
+    if not video.get("subtitle_text"):
+        return jsonify({"error": "没有字幕内容"}), 404
+
+    filename = f"{video['video_id']}_segmented.txt"
+    filename = "".join(c for c in filename if c.isalnum() or c in "._- ")
+
+    return Response(
+        video["subtitle_text"],
+        mimetype="text/plain",
+        headers={"Content-Disposition": f"attachment;filename={filename}"},
+    )
 
 
 @app.route("/api/video/<int:video_db_id>/transcript/srt")

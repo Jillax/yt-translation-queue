@@ -84,8 +84,73 @@
 
                 <div id="transcriptError" class="alert alert-warning" style="display:none;"></div>
 
+                <!-- 智能断句 -->
+                <div class="card bg-light mb-3" id="segmentPanel">
+                    <div class="card-body">
+                        <h6 class="card-title"><i class="bi bi-scissors"></i> 智能断句</h6>
+                        <div class="row g-2 align-items-end">
+                            <div class="col-auto">
+                                <label class="form-label small">每行最大字符数</label>
+                                <input type="number" class="form-control form-control-sm" id="maxCharsInput" 
+                                       value="24" min="10" max="80" style="width:80px;">
+                            </div>
+                            <div class="col-auto">
+                                <label class="form-label small">断句方式</label>
+                                <select class="form-select form-select-sm" id="segmentMethod" style="width:140px;">
+                                    <option value="llm" selected>LLM 智能断句</option>
+                                    <option value="simple">简单标点断句</option>
+                                </select>
+                            </div>
+                            <div class="col-auto">
+                                <button class="btn btn-primary btn-sm" id="segmentBtn" onclick="doSegment({{ video.id }})">
+                                    <i class="bi bi-magic"></i> 执行断句
+                                </button>
+                            </div>
+                            <div class="col-auto">
+                                <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" href="#llmSettings">
+                                    <i class="bi bi-gear"></i> LLM 设置
+                                </button>
+                            </div>
+                        </div>
+                        <div class="collapse mt-2" id="llmSettings">
+                            <div class="card card-body">
+                                <div class="row g-2">
+                                    <div class="col-12">
+                                        <label class="form-label small">API Base URL</label>
+                                        <input type="text" class="form-control form-control-sm" id="llmBaseUrl" 
+                                               value="https://token-plan-cn.xiaomimimo.com/v1" placeholder="OpenAI 兼容 API 地址">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">API Key</label>
+                                        <input type="password" class="form-control form-control-sm" id="llmApiKey" 
+                                               value="tp-c58etypj3tga8i9b3dyc53oioy3enww0izd1asxeeio5m7kx" placeholder="API Key">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">模型名称</label>
+                                        <input type="text" class="form-control form-control-sm" id="llmModel" 
+                                               value="gpt-4o-mini" placeholder="模型名">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="segmentLoading" class="text-center py-3" style="display:none;">
+                    <div class="spinner-border text-primary spinner-border-sm" role="status"></div>
+                    <span class="ms-2 text-muted">LLM 断句处理中，请稍候...</span>
+                </div>
+
                 {% if video.subtitle_text %}
                 <div class="transcript-area" id="transcriptContent">{{ video.subtitle_text }}</div>
+                <div class="mt-2 d-flex gap-2">
+                    <button class="btn btn-outline-success btn-sm" id="saveSegmentBtn" style="display:none;" onclick="saveSegmented({{ video.id }})">
+                        <i class="bi bi-save"></i> 保存断句结果
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" id="exportSegmentBtn" style="display:none;" onclick="exportSegmented({{ video.id }})">
+                        <i class="bi bi-download"></i> 导出断句文本
+                    </button>
+                </div>
                 {% else %}
                 <div id="transcriptContent" class="text-center py-4 text-muted">
                     <i class="bi bi-file-text" style="font-size:2rem;"></i>
@@ -281,6 +346,90 @@
             location.reload();
         } else {
             showToast(data.error || '创建失败', 'error');
+        }
+    }
+
+    async function doSegment(videoId) {
+        const maxChars = parseInt(document.getElementById('maxCharsInput').value) || 24;
+        const method = document.getElementById('segmentMethod').value;
+        const btn = document.getElementById('segmentBtn');
+        const loading = document.getElementById('segmentLoading');
+
+        btn.disabled = true;
+        loading.style.display = 'block';
+
+        const body = {
+            max_chars: maxChars,
+            use_llm: method === 'llm',
+        };
+
+        if (method === 'llm') {
+            const apiKey = document.getElementById('llmApiKey').value.trim();
+            const baseUrl = document.getElementById('llmBaseUrl').value.trim();
+            const model = document.getElementById('llmModel').value.trim();
+            if (apiKey) body.api_key = apiKey;
+            if (baseUrl) body.base_url = baseUrl;
+            if (model) body.model = model;
+        }
+
+        const data = await apiCall(`/api/video/${videoId}/segment`, {
+            method: 'POST',
+            body: JSON.stringify(body),
+        });
+
+        loading.style.display = 'none';
+        btn.disabled = false;
+
+        if (data.success) {
+            const content = document.getElementById('transcriptContent');
+            content.className = 'transcript-area';
+            content.textContent = data.segmented;
+
+            // 显示保存和导出按钮
+            document.getElementById('saveSegmentBtn').style.display = '';
+            document.getElementById('exportSegmentBtn').style.display = '';
+
+            // 保存到临时变量
+            window._segmentedText = data.segmented;
+
+            const info = data.model ? ` (模型: ${data.model})` : '';
+            showToast(`断句完成${info}，共 ${data.lines_count || '?'} 行，每行最大 ${data.max_chars} 字符`);
+        } else {
+            showToast(data.error || '断句失败', 'error');
+        }
+    }
+
+    async function saveSegmented(videoId) {
+        const text = window._segmentedText;
+        if (!text) {
+            showToast('没有可保存的断句结果', 'warning');
+            return;
+        }
+        const data = await apiCall(`/api/video/${videoId}/segment/save`, {
+            method: 'POST',
+            body: JSON.stringify({ text: text }),
+        });
+        if (data.success) {
+            showToast('断句结果已保存到数据库');
+        } else {
+            showToast(data.error || '保存失败', 'error');
+        }
+    }
+
+    async function exportSegmented(videoId) {
+        const text = window._segmentedText;
+        if (text) {
+            // 直接下载当前显示的文本
+            const blob = new Blob([text], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${videoId}_segmented.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } else {
+            // 从服务器导出
+            window.open(`/api/video/${videoId}/segment/export`, '_blank');
         }
     }
 

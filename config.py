@@ -41,6 +41,12 @@ TRANSLATION_STATUSES = [
     ("published", "已发布", "#28a745"),     # 绿色
 ]
 
+# === LLM 配置（OpenAI 兼容 API） ===
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "tp-c58etypj3tga8i9b3dyc53oioy3enww0izd1asxeeio5m7kx")
+LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://token-plan-cn.xiaomimimo.com/v1")
+LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o-mini")
+LLM_MAX_CHARS_PER_LINE = int(os.environ.get("LLM_MAX_CHARS", "24"))
+
 # === 应用配置 ===
 APP_HOST = "127.0.0.1"
 APP_PORT = 5000
