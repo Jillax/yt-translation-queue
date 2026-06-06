@@ -14,6 +14,11 @@
             <input type="text" class="form-control" id="searchInput" 
                    placeholder="输入关键词搜索 YouTube 视频..." value="{{ query }}"
                    autocomplete="off">
+            <select class="form-select" id="maxResultsSelect" style="max-width:120px;font-size:0.9rem;">
+                <option value="10">10 个</option>
+                <option value="25">25 个</option>
+                <option value="50" selected>50 个</option>
+            </select>
             <button class="btn btn-primary" type="submit" id="searchBtn">
                 <i class="bi bi-search"></i> 搜索
             </button>
@@ -138,9 +143,10 @@
         loading.style.display = 'block';
         dynamicResults.innerHTML = '';
 
+        const maxResults = parseInt(document.getElementById('maxResultsSelect').value) || 50;
         const data = await apiCall('/api/search', {
             method: 'POST',
-            body: JSON.stringify({ query: query, max_results: 25 }),
+            body: JSON.stringify({ query: query, max_results: maxResults }),
         });
 
         loading.style.display = 'none';

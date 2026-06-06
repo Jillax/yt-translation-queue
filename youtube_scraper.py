@@ -237,7 +237,7 @@ def get_channel_videos_api(channel_id, max_results=25):
 
 # === 无 API Key 的备用方案（使用 yt-dlp 搜索） ===
 
-def search_videos_ytdlp(query, max_results=15):
+def search_videos_ytdlp(query, max_results=50):
     """
     使用 yt-dlp 搜索视频（无需 API Key）
     注意：速度较慢，但不需要 API Key

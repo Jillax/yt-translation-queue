@@ -122,7 +122,7 @@ def search_page():
     error = None
 
     if query:
-        result = search_videos(query, max_results=25)
+        result = search_videos(query, max_results=50)
         if "error" in result:
             error = result["error"]
         else:
