@@ -534,7 +534,7 @@ def api_download_video(video_db_id):
     output_template = os.path.join(output_dir, f"{safe_title}.%(ext)s")
 
     cmd = [
-        "yt-dlp", "--no-playlist",
+        "yt-dlp", "--no-playlist", "--js-runtimes", "nodejs",
         "-f", "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
         "--merge-output-format", "mp4",
         "-o", output_template,
@@ -575,7 +575,7 @@ def api_download_thumbnail(video_db_id):
     output_template = os.path.join(output_dir, f"{safe_title}.%(ext)s")
 
     cmd = [
-        "yt-dlp", "--no-playlist",
+        "yt-dlp", "--no-playlist", "--js-runtimes", "nodejs",
         "--write-thumbnail", "--skip-download",
         "--convert-thumbnails", "jpg",
         "-o", output_template,
@@ -613,7 +613,7 @@ def api_download_subtitle(video_db_id):
     output_template = os.path.join(output_dir, f"{safe_title}.%(ext)s")
 
     # List available subtitles
-    cmd_list = ["yt-dlp", "--no-playlist", "--list-subs", youtube_url]
+    cmd_list = ["yt-dlp", "--no-playlist", "--js-runtimes", "nodejs", "--list-subs", youtube_url]
     try:
         result = subprocess.run(cmd_list, capture_output=True, text=True, timeout=30)
         available_subs = result.stdout if result.returncode == 0 else ""
@@ -622,7 +622,7 @@ def api_download_subtitle(video_db_id):
 
     # Download auto-generated subtitles
     cmd = [
-        "yt-dlp", "--no-playlist",
+        "yt-dlp", "--no-playlist", "--js-runtimes", "nodejs",
         "--write-auto-sub", "--sub-lang", "en",
         "--sub-format", "ass/srt/best",
         "--skip-download",

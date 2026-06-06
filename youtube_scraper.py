@@ -250,6 +250,7 @@ def search_videos_ytdlp(query, max_results=50):
         "no_warnings": True,
         "extract_flat": True,
         "force_generic_extractor": False,
+        "compat_opts": ["no-youtube-prefer-utc"],
     }
 
     try:
