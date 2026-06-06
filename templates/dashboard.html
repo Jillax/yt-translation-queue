@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}数据看板 - YT 翻译待译库{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2><i class="bi bi-bar-chart-line"></i> 数据看板</h2>
+    <small class="text-muted">翻译进度总览</small>
+</div>
+
+<!-- 概览统计 -->
+<div class="row g-3 mb-4">
+    <div class="col-xl-3 col-md-6">
+        <div class="card stat-card">
+            <div class="stat-number">{{ stats.total }}</div>
+            <div class="stat-label">总视频数</div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card stat-card">
+            <div class="stat-number" style="color:#28a745;">
+                {{ stats.subtitle_count }}
+            </div>
+            <div class="stat-label">已获取字幕</div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card stat-card">
+            <div class="stat-number" style="color:#17a2b8;">
+                {{ stats.status_counts.get('translated', 0) + stats.status_counts.get('proofreading', 0) }}
+            </div>
+            <div class="stat-label">翻译中/已校对</div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card stat-card">
+            <div class="stat-number" style="color:#6c5ce7;">
+                {{ stats.status_counts.get('published', 0) }}
+            </div>
+            <div class="stat-label">已发布</div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- 翻译状态分布 -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-pie-chart"></i> 翻译状态分布</h5>
+                {% if stats.total > 0 %}
+                <div class="mt-3">
+                    {% for code, label, color in statuses %}
+                    {% set count = stats.status_counts.get(code, 0) %}
+                    {% set pct = (count / stats.total * 100)|round(1) if stats.total > 0 else 0 %}
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span>
+                                <span class="status-badge status-{{ code }}">{{ label }}</span>
+                            </span>
+                            <span class="text-muted">{{ count }} 个 ({{ pct }}%)</span>
+                        </div>
+                        <div class="progress" style="height:8px;border-radius:4px;">
+                            <div class="progress-bar" style="width:{{ pct }}%;background:{{ color }};border-radius:4px;"></div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="empty-state" style="padding:30px;">
+                    <i class="bi bi-bar-chart" style="font-size:2rem;"></i>
+                    <p>暂无数据</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 频道分布 -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-broadcast"></i> 频道分布 (Top 10)</h5>
+                {% if stats.channel_counts %}
+                <div class="mt-3">
+                    {% set max_count = stats.channel_counts[0].cnt if stats.channel_counts else 1 %}
+                    {% for ch in stats.channel_counts[:10] %}
+                    {% set pct = (ch.cnt / max_count * 100)|round(1) %}
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="small">
+                                <a href="{{ url_for('index', channel_id=ch.channel_id) }}" class="text-decoration-none">
+                                    {{ ch.channel_name or '未知频道' }}
+                                </a>
+                            </span>
+                            <span class="text-muted small">{{ ch.cnt }} 个</span>
+                        </div>
+                        <div class="progress" style="height:6px;border-radius:3px;">
+                            <div class="progress-bar" style="width:{{ pct }}%;background:#6c5ce7;border-radius:3px;"></div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="empty-state" style="padding:30px;">
+                    <i class="bi bi-broadcast" style="font-size:2rem;"></i>
+                    <p>暂无数据</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 最近添加 -->
+<div class="card mt-4">
+    <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-clock-history"></i> 最近添加</h5>
+        {% if stats.recent %}
+        <div class="table-responsive mt-3">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>缩略图</th>
+                        <th>标题</th>
+                        <th>频道</th>
+                        <th>添加时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for v in stats.recent %}
+                    <tr>
+                        <td>
+                            {% if v.thumbnail_url %}
+                            <img src="{{ v.thumbnail_url }}" style="width:80px;height:45px;object-fit:cover;border-radius:4px;">
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('video_detail', video_db_id=v.id) }}" class="text-decoration-none">
+                                {{ v.title[:60] }}{% if v.title|length > 60 %}...{% endif %}
+                            </a>
+                        </td>
+                        <td class="text-muted">{{ v.channel_name }}</td>
+                        <td class="text-muted small">{{ v.added_at|format_datetime }}</td>
+                        <td>
+                            <a href="{{ url_for('video_detail', video_db_id=v.id) }}" class="btn btn-outline-primary btn-sm">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state" style="padding:30px;">
+            <i class="bi bi-inbox" style="font-size:2rem;"></i>
+            <p>还没有添加任何视频</p>
+            <a href="{{ url_for('search_page') }}" class="btn btn-primary btn-sm mt-2">
+                <i class="bi bi-search"></i> 搜索视频
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

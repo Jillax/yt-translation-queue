@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}频道管理 - YT 翻译待译库{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2><i class="bi bi-broadcast"></i> 频道管理</h2>
+    <small class="text-muted">关注 YouTube 频道，定期检查新视频</small>
+</div>
+
+<!-- 添加频道 -->
+<div class="card mb-4">
+    <div class="card-body">
+        <h6 class="card-title"><i class="bi bi-plus-circle"></i> 添加关注频道</h6>
+        <form id="addChannelForm" onsubmit="addChannel(event)">
+            <div class="row g-2">
+                <div class="col-md-5">
+                    <input type="text" class="form-control" id="channelIdInput" 
+                           placeholder="YouTube 频道 ID (如 UCNIuvl7V8zACPpTmmNI7P2Q)" required>
+                </div>
+                <div class="col-md-4">
+                    <input type="text" class="form-control" id="channelNameInput" 
+                           placeholder="频道名称（可选）">
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-plus"></i> 添加频道
+                    </button>
+                </div>
+            </div>
+            <small class="text-muted mt-1 d-block">
+                <i class="bi bi-info-circle"></i> 
+                频道 ID 可在频道页面 URL 中找到，格式如: youtube.com/channel/<strong>UC...</strong>
+            </small>
+        </form>
+    </div>
+</div>
+
+<!-- 频道列表 -->
+{% if channels %}
+<div class="row g-3" id="channelList">
+    {% for ch in channels %}
+    <div class="col-lg-6" id="channel-{{ ch.id }}">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex align-items-start gap-3">
+                    {% if ch.thumbnail_url %}
+                    <img src="{{ ch.thumbnail_url }}" alt="{{ ch.name }}" 
+                         class="rounded-circle" style="width:60px;height:60px;object-fit:cover;">
+                    {% else %}
+                    <div class="rounded-circle d-flex align-items-center justify-content-center" 
+                         style="width:60px;height:60px;background:#e9ecef;font-size:1.5rem;color:#636e72;">
+                        <i class="bi bi-broadcast"></i>
+                    </div>
+                    {% endif %}
+                    <div class="flex-grow-1">
+                        <h6 class="mb-1">{{ ch.name }}</h6>
+                        <div class="text-muted small">
+                            <span><i class="bi bi-key"></i> <code>{{ ch.channel_id }}</code></span>
+                            {% if ch.subscriber_count %}
+                            <span class="ms-2"><i class="bi bi-people"></i> {{ ch.subscriber_count }} 订阅</span>
+                            {% endif %}
+                        </div>
+                        {% if ch.description %}
+                        <p class="text-muted small mt-1 mb-0" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+                            {{ ch.description[:200] }}
+                        </p>
+                        {% endif %}
+                        <div class="text-muted small mt-1">
+                            <i class="bi bi-calendar"></i> 添加于 {{ ch.added_at|format_datetime }}
+                            {% if ch.last_checked %}
+                            | <i class="bi bi-clock"></i> 上次检查: {{ ch.last_checked|format_datetime }}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex gap-2 mt-3">
+                    <button class="btn btn-primary btn-sm flex-grow-1" 
+                            onclick="fetchChannelVideos('{{ ch.channel_id }}', this)">
+                        <i class="bi bi-download"></i> 获取最新视频
+                    </button>
+                    <a href="https://www.youtube.com/channel/{{ ch.channel_id }}" target="_blank"
+                       class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-youtube"></i>
+                    </a>
+                    <button class="btn btn-outline-danger btn-sm" onclick="deleteChannel({{ ch.id }})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <i class="bi bi-broadcast"></i>
+    <p>还没有关注任何频道</p>
+    <p class="text-muted">添加你感兴趣的 YouTube 频道，方便追踪新视频</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function addChannel(e) {
+        e.preventDefault();
+        const channelId = document.getElementById('channelIdInput').value.trim();
+        const channelName = document.getElementById('channelNameInput').value.trim();
+        if (!channelId) return;
+
+        const data = await apiCall('/api/channels', {
+            method: 'POST',
+            body: JSON.stringify({
+                channel_id: channelId,
+                name: channelName || channelId,
+            }),
+        });
+
+        if (data.success) {
+            showToast('频道已添加');
+            location.reload();
+        } else {
+            showToast(data.error || '添加失败', 'error');
+        }
+    }
+
+    async function fetchChannelVideos(channelId, btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 获取中...';
+
+        const data = await apiCall(`/api/channels/${channelId}/fetch`, {
+            method: 'POST',
+        });
+
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-download"></i> 获取最新视频';
+
+        if (data.success) {
+            showToast(`获取完成: ${data.added} 个新视频, ${data.skipped} 个已存在, 共找到 ${data.total_found} 个`);
+        } else {
+            showToast(data.error || '获取失败', 'error');
+        }
+    }
+
+    async function deleteChannel(dbId) {
+        if (!confirm('确定要取消关注这个频道吗？')) return;
+        const data = await apiCall(`/api/channels/${dbId}`, { method: 'DELETE' });
+        if (data.success) {
+            document.getElementById(`channel-${dbId}`).remove();
+            showToast('已取消关注');
+        }
+    }
+</script>
+{% endblock %}

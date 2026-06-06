@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+{% block title %}搜索视频 - YT 翻译待译库{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2><i class="bi bi-search"></i> 搜索视频</h2>
+    <small class="text-muted">在 YouTube 上搜索人文社科、女性主义、教育相关内容</small>
+</div>
+
+<!-- 搜索框 -->
+<div class="search-box">
+    <form id="searchForm" onsubmit="performSearch(event)">
+        <div class="input-group input-group-lg">
+            <input type="text" class="form-control" id="searchInput" 
+                   placeholder="输入关键词搜索 YouTube 视频..." value="{{ query }}"
+                   autocomplete="off">
+            <button class="btn btn-primary" type="submit" id="searchBtn">
+                <i class="bi bi-search"></i> 搜索
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- 推荐关键词 -->
+{% if not query %}
+<div class="mb-3">
+    <h6 class="text-muted mb-2"><i class="bi bi-lightbulb"></i> 推荐关键词</h6>
+    <div class="d-flex flex-wrap gap-2">
+        {% for kw in keywords %}
+        <button class="btn btn-outline-secondary btn-sm" onclick="quickSearch('{{ kw }}')">
+            {{ kw }}
+        </button>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- 搜索历史 -->
+{% if recent_searches and not query %}
+<div class="card mb-3">
+    <div class="card-body">
+        <h6 class="card-title text-muted"><i class="bi bi-clock-history"></i> 最近搜索</h6>
+        <div class="d-flex flex-wrap gap-2">
+            {% for item in recent_searches %}
+            <button class="btn btn-outline-secondary btn-sm" onclick="quickSearch('{{ item.keyword }}')">
+                {{ item.keyword }}
+                <span class="badge bg-secondary">{{ item.results_count }}</span>
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- 加载指示器 -->
+<div id="loadingIndicator" class="text-center py-5" style="display:none;">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">搜索中...</span>
+    </div>
+    <p class="mt-2 text-muted">正在搜索 YouTube...</p>
+</div>
+
+<!-- 错误信息 -->
+{% if error %}
+<div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle"></i> {{ error }}
+</div>
+{% endif %}
+
+<!-- 搜索结果 -->
+{% if results %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h5>搜索结果 ({{ results|length }} 个视频)</h5>
+    <button class="btn btn-success btn-sm" onclick="batchAddAll()">
+        <i class="bi bi-plus-circle"></i> 全部添加到待译库
+    </button>
+</div>
+
+<div class="row g-3" id="searchResults">
+    {% for video in results %}
+    <div class="col-xl-3 col-lg-4 col-md-6" id="result-{{ video.video_id }}">
+        <div class="card h-100">
+            <div class="thumb-wrapper" style="position:relative;overflow:hidden;border-radius:12px 12px 0 0;">
+                {% if video.thumbnail_url %}
+                <a href="https://www.youtube.com/watch?v={{ video.video_id }}" target="_blank">
+                    <img src="{{ video.thumbnail_url }}" alt="{{ video.title }}" loading="lazy"
+                         style="width:100%;aspect-ratio:16/9;object-fit:cover;">
+                </a>
+                {% endif %}
+                {% if video.duration %}
+                <span class="duration-badge">{{ video.duration }}</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="video-title" style="font-size:0.9rem;font-weight:600;color:#2d3436;
+                    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+                    {{ video.title }}
+                </div>
+                <div class="video-meta" style="font-size:0.8rem;color:#636e72;margin-top:6px;">
+                    <div><i class="bi bi-person"></i> {{ video.channel_name or '未知频道' }}</div>
+                    <div><i class="bi bi-eye"></i> {{ video.view_count|format_number }}</div>
+                    {% if video.published_at %}
+                    <div><i class="bi bi-calendar"></i> {{ video.published_at|format_datetime }}</div>
+                    {% endif %}
+                </div>
+                <div class="mt-2">
+                    <button class="btn btn-primary btn-sm w-100 add-btn" 
+                            onclick="addToQueue('{{ video.video_id }}', '{{ video.title|e }}', '{{ video.channel_name|e }}', '{{ video.channel_id }}', '{{ video.thumbnail_url }}', '{{ video.duration }}', '{{ video.published_at }}', {{ video.view_count }}, '{{ video.description|e }}', this)">
+                        <i class="bi bi-plus"></i> 添加到待译库
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- 搜索结果容器（JS 动态填充） -->
+<div class="row g-3" id="dynamicResults"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function quickSearch(keyword) {
+        document.getElementById('searchInput').value = keyword;
+        performSearch({ preventDefault: () => {} });
+    }
+
+    async function performSearch(e) {
+        e.preventDefault();
+        const query = document.getElementById('searchInput').value.trim();
+        if (!query) return;
+
+        const loading = document.getElementById('loadingIndicator');
+        const dynamicResults = document.getElementById('dynamicResults');
+        
+        loading.style.display = 'block';
+        dynamicResults.innerHTML = '';
+
+        const data = await apiCall('/api/search', {
+            method: 'POST',
+            body: JSON.stringify({ query: query, max_results: 25 }),
+        });
+
+        loading.style.display = 'none';
+
+        if (data.error) {
+            showToast(data.error, 'error');
+            return;
+        }
+
+        if (!data.videos || data.videos.length === 0) {
+            dynamicResults.innerHTML = `
+                <div class="col-12 empty-state">
+                    <i class="bi bi-search"></i>
+                    <p>没有找到相关视频</p>
+                </div>`;
+            return;
+        }
+
+        // 隐藏静态结果（如果有）
+        const staticResults = document.getElementById('searchResults');
+        if (staticResults) staticResults.style.display = 'none';
+
+        showToast(`找到 ${data.videos.length} 个视频`);
+
+        let html = `<div class="col-12 d-flex justify-content-between align-items-center mb-2">
+            <h5>搜索结果 (${data.videos.length} 个视频)</h5>
+            <button class="btn btn-success btn-sm" onclick="batchAddAllDynamic()">
+                <i class="bi bi-plus-circle"></i> 全部添加到待译库
+            </button>
+        </div>`;
+
+        data.videos.forEach(v => {
+            const desc = (v.description || '').substring(0, 100).replace(/'/g, "\\'");
+            const title = (v.title || '').replace(/'/g, "\\'");
+            const channel = (v.channel_name || '').replace(/'/g, "\\'");
+            html += `
+            <div class="col-xl-3 col-lg-4 col-md-6" id="dyn-result-${v.video_id}">
+                <div class="card h-100">
+                    <div class="thumb-wrapper" style="position:relative;overflow:hidden;border-radius:12px 12px 0 0;">
+                        ${v.thumbnail_url ? `<a href="https://www.youtube.com/watch?v=${v.video_id}" target="_blank">
+                            <img src="${v.thumbnail_url}" alt="${title}" loading="lazy"
+                                 style="width:100%;aspect-ratio:16/9;object-fit:cover;">
+                        </a>` : ''}
+                        ${v.duration ? `<span class="duration-badge">${v.duration}</span>` : ''}
+                    </div>
+                    <div class="card-body">
+                        <div class="video-title" style="font-size:0.9rem;font-weight:600;color:#2d3436;
+                            display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+                            ${v.title}
+                        </div>
+                        <div class="video-meta" style="font-size:0.8rem;color:#636e72;margin-top:6px;">
+                            <div><i class="bi bi-person"></i> ${v.channel_name || '未知频道'}</div>
+                            <div><i class="bi bi-eye"></i> ${formatNum(v.view_count)}</div>
+                        </div>
+                        <div class="mt-2">
+                            <button class="btn btn-primary btn-sm w-100 add-btn" 
+                                    onclick="addToQueue('${v.video_id}', '${title}', '${channel}', '${v.channel_id}', '${v.thumbnail_url}', '${v.duration}', '${v.published_at}', ${v.view_count}, '${desc}', this)">
+                                <i class="bi bi-plus"></i> 添加到待译库
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        });
+
+        dynamicResults.innerHTML = html;
+        window._lastSearchResults = data.videos;
+    }
+
+    function formatNum(n) {
+        if (!n) return '0';
+        n = parseInt(n);
+        if (n >= 1000000) return (n/1000000).toFixed(1) + 'M';
+        if (n >= 1000) return (n/1000).toFixed(1) + 'K';
+        return n.toString();
+    }
+
+    async function addToQueue(videoId, title, channelName, channelId, thumbnail, duration, publishedAt, viewCount, description, btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 添加中...';
+
+        const data = await apiCall('/api/video/add', {
+            method: 'POST',
+            body: JSON.stringify({
+                video_id: videoId,
+                title: title,
+                channel_name: channelName,
+                channel_id: channelId,
+                thumbnail_url: thumbnail,
+                duration: duration,
+                published_at: publishedAt,
+                view_count: viewCount,
+                description: description,
+            }),
+        });
+
+        if (data.success) {
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-success');
+            btn.innerHTML = '<i class="bi bi-check"></i> ' + data.message;
+            showToast(data.message);
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-plus"></i> 添加到待译库';
+            showToast(data.error || '添加失败', 'error');
+        }
+    }
+
+    async function batchAddAll() {
+        const videos = {{ results|tojson }};
+        await batchAdd(videos);
+    }
+
+    async function batchAddAllDynamic() {
+        if (window._lastSearchResults) {
+            await batchAdd(window._lastSearchResults);
+        }
+    }
+
+    async function batchAdd(videos) {
+        const btn = event.target;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 批量添加中...';
+
+        const data = await apiCall('/api/video/batch-add', {
+            method: 'POST',
+            body: JSON.stringify({ videos: videos }),
+        });
+
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-plus-circle"></i> 全部添加到待译库';
+
+        if (data.success) {
+            showToast(`添加完成: ${data.added} 个新视频, ${data.skipped} 个已存在`);
+        } else {
+            showToast(data.error || '批量添加失败', 'error');
+        }
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}视频列表 - YT 翻译待译库{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <div>
+        <h2><i class="bi bi-collection-play"></i> 视频列表</h2>
+        <small class="text-muted">共 {{ total }} 个视频</small>
+    </div>
+    <a href="{{ url_for('search_page') }}" class="btn btn-primary">
+        <i class="bi bi-search"></i> 搜索新视频
+    </a>
+</div>
+
+<!-- 筛选栏 -->
+<div class="filter-bar">
+    <form method="GET" action="{{ url_for('index') }}" class="d-flex flex-wrap gap-2 align-items-center w-100">
+        <div class="input-group" style="max-width:300px;">
+            <input type="text" class="form-control" name="search" placeholder="搜索标题/频道..." 
+                   value="{{ current_search }}">
+            <button class="btn btn-outline-primary" type="submit"><i class="bi bi-search"></i></button>
+        </div>
+        
+        <select class="form-select" name="status" style="max-width:150px;" onchange="this.form.submit()">
+            <option value="">全部状态</option>
+            {% for code, label, color in statuses %}
+            <option value="{{ code }}" {% if current_status == code %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+
+        <select class="form-select" name="tag_id" style="max-width:150px;" onchange="this.form.submit()">
+            <option value="">全部标签</option>
+            {% for tag in tags %}
+            <option value="{{ tag.id }}" {% if current_tag_id == tag.id|string %}selected{% endif %}>
+                {{ tag.name }}
+            </option>
+            {% endfor %}
+        </select>
+
+        <select class="form-select" name="channel_id" style="max-width:180px;" onchange="this.form.submit()">
+            <option value="">全部频道</option>
+            {% for ch in channels %}
+            <option value="{{ ch.channel_id }}" {% if current_channel_id == ch.channel_id %}selected{% endif %}>
+                {{ ch.name }}
+            </option>
+            {% endfor %}
+        </select>
+
+        <select class="form-select" name="sort_by" style="max-width:150px;" onchange="this.form.submit()">
+            <option value="added_at" {% if current_sort_by == 'added_at' %}selected{% endif %}>添加时间</option>
+            <option value="published_at" {% if current_sort_by == 'published_at' %}selected{% endif %}>发布时间</option>
+            <option value="title" {% if current_sort_by == 'title' %}selected{% endif %}>标题</option>
+            <option value="view_count" {% if current_sort_by == 'view_count' %}selected{% endif %}>观看次数</option>
+            <option value="priority" {% if current_sort_by == 'priority' %}selected{% endif %}>优先级</option>
+        </select>
+
+        <select class="form-select" name="sort_order" style="max-width:100px;" onchange="this.form.submit()">
+            <option value="DESC" {% if current_sort_order == 'DESC' %}selected{% endif %}>降序</option>
+            <option value="ASC" {% if current_sort_order == 'ASC' %}selected{% endif %}>升序</option>
+        </select>
+
+        {% if current_search or current_status or current_tag_id or current_channel_id %}
+        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-x-circle"></i> 清除筛选
+        </a>
+        {% endif %}
+    </form>
+</div>
+
+<!-- 视频网格 -->
+{% if videos %}
+<div class="row g-3">
+    {% for video in videos %}
+    <div class="col-xl-3 col-lg-4 col-md-6">
+        <div class="card video-card h-100" onclick="window.location='{{ url_for('video_detail', video_db_id=video.id) }}'">
+            <div class="thumb-wrapper">
+                {% if video.thumbnail_url %}
+                <img src="{{ video.thumbnail_url }}" alt="{{ video.title }}" loading="lazy">
+                {% else %}
+                <div style="aspect-ratio:16/9;background:#ddd;display:flex;align-items:center;justify-content:center;">
+                    <i class="bi bi-play-circle" style="font-size:3rem;color:#aaa;"></i>
+                </div>
+                {% endif %}
+                {% if video.duration %}
+                <span class="duration-badge">{{ video.duration }}</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="video-title">{{ video.title }}</div>
+                <div class="video-meta">
+                    <div><i class="bi bi-person"></i> {{ video.channel_name or '未知频道' }}</div>
+                    <div class="d-flex justify-content-between align-items-center mt-1">
+                        <span>
+                            <i class="bi bi-eye"></i> {{ video.view_count|format_number }}
+                        </span>
+                        <span class="status-badge status-{{ video.translation_status }}">
+                            {% for code, label, color in statuses %}
+                                {% if code == video.translation_status %}{{ label }}{% endif %}
+                            {% endfor %}
+                        </span>
+                    </div>
+                    {% if video.tags_list %}
+                    <div class="mt-2">
+                        {% for tag_name in video.tags_list %}
+                        <span class="tag-badge" style="background:#6c5ce7;">{{ tag_name }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    {% if video.subtitle_downloaded %}
+                    <div class="mt-1"><small class="text-success"><i class="bi bi-file-text"></i> 已获取字幕</small></div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- 分页 -->
+{% set total_pages = (total + per_page - 1) // per_page %}
+{% if total_pages > 1 %}
+<nav class="mt-4">
+    <ul class="pagination justify-content-center">
+        <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+            <a class="page-link" href="{{ url_for('index', page=page-1, status=current_status, tag_id=current_tag_id, channel_id=current_channel_id, search=current_search, sort_by=current_sort_by, sort_order=current_sort_order) }}">
+                <i class="bi bi-chevron-left"></i>
+            </a>
+        </li>
+        {% for p in range(1, total_pages + 1) %}
+            {% if p == page %}
+            <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+            {% elif p <= 3 or p > total_pages - 3 or (p >= page - 1 and p <= page + 1) %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('index', page=p, status=current_status, tag_id=current_tag_id, channel_id=current_channel_id, search=current_search, sort_by=current_sort_by, sort_order=current_sort_order) }}">{{ p }}</a>
+            </li>
+            {% elif p == 4 or p == total_pages - 3 %}
+            <li class="page-item disabled"><span class="page-link">...</span></li>
+            {% endif %}
+        {% endfor %}
+        <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+            <a class="page-link" href="{{ url_for('index', page=page+1, status=current_status, tag_id=current_tag_id, channel_id=current_channel_id, search=current_search, sort_by=current_sort_by, sort_order=current_sort_order) }}">
+                <i class="bi bi-chevron-right"></i>
+            </a>
+        </li>
+    </ul>
+</nav>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+    <i class="bi bi-collection-play"></i>
+    <p>待译库中还没有视频</p>
+    <a href="{{ url_for('search_page') }}" class="btn btn-primary mt-3">
+        <i class="bi bi-search"></i> 去搜索视频
+    </a>
+</div>
+{% endif %}
+{% endblock %}
