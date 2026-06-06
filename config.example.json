@@ -1,0 +1,6 @@
+{
+  "api_base": "https://your-api-endpoint.com/v1",
+  "api_key": "your-api-key-here",
+  "model": "your-model-name",
+  "max_lines_per_batch": 60
+}

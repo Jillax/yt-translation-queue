@@ -45,6 +45,17 @@
                         <i class="bi bi-trash"></i> 删除
                     </button>
                 </div>
+                <div class="d-flex gap-2 mt-2">
+                    <button class="btn btn-outline-success btn-sm" onclick="downloadVideo({{ video.id }})">
+                        <i class="bi bi-download"></i> 下载视频 (1080p)
+                    </button>
+                    <button class="btn btn-outline-info btn-sm" onclick="downloadThumbnail({{ video.id }})">
+                        <i class="bi bi-image"></i> 下载封面
+                    </button>
+                    <button class="btn btn-outline-warning btn-sm" onclick="downloadSubtitle({{ video.id }})">
+                        <i class="bi bi-file-earmark-text"></i> 下载 ASS 字幕
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -430,6 +441,36 @@
         } else {
             // 从服务器导出
             window.open(`/api/video/${videoId}/segment/export`, '_blank');
+        }
+    }
+
+    async function downloadVideo(videoId) {
+        showToast('开始下载视频（1080p），请耐心等待...', 'warning');
+        const data = await apiCall(`/api/video/${videoId}/download`, { method: 'POST' });
+        if (data.success) {
+            showToast(data.message);
+        } else {
+            showToast(data.error || '下载失败', 'error');
+        }
+    }
+
+    async function downloadThumbnail(videoId) {
+        showToast('正在下载封面...', 'warning');
+        const data = await apiCall(`/api/video/${videoId}/download-thumbnail`, { method: 'POST' });
+        if (data.success) {
+            showToast(data.message);
+        } else {
+            showToast(data.error || '封面下载失败', 'error');
+        }
+    }
+
+    async function downloadSubtitle(videoId) {
+        showToast('正在下载 ASS 字幕...', 'warning');
+        const data = await apiCall(`/api/video/${videoId}/download-subtitle`, { method: 'POST' });
+        if (data.success) {
+            showToast(data.message);
+        } else {
+            showToast(data.error || '字幕下载失败', 'error');
         }
     }
 

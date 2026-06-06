@@ -32,6 +32,16 @@ desktop.ini
 # Env
 .env
 *.env
+config.json
 
 # Setup scripts
 _setup_github.py
+_copy_helper.py
+
+# Downloads
+downloads/
+
+# Translation memory
+translation_memory.json
+human_feedback.json
+*.progress.json

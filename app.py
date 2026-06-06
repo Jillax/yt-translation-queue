@@ -31,6 +31,8 @@ from youtube_scraper import (
 )
 from llm_segment import segment_transcript, simple_segment
 from config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, LLM_MAX_CHARS_PER_LINE
+import subprocess
+import json as json_lib
 
 app = Flask(__name__)
 app.secret_key = "yt-translation-queue-secret-key"
@@ -179,6 +181,21 @@ def dashboard():
     """数据看板"""
     stats = get_dashboard_stats()
     return render_template("dashboard.html", stats=stats, statuses=TRANSLATION_STATUSES)
+
+
+@app.route("/translate")
+def translate_page():
+    """翻译管理页面"""
+    videos = get_videos(status="pending", per_page=50)
+    translating = get_videos(status="translating", per_page=50)
+    translated = get_videos(status="translated", per_page=50)
+    return render_template(
+        "translate.html",
+        pending_videos=videos["videos"],
+        translating_videos=translating["videos"],
+        translated_videos=translated["videos"],
+        statuses=TRANSLATION_STATUSES,
+    )
 
 
 # === API 路由 ===
@@ -484,6 +501,136 @@ def api_fetch_channel_videos(channel_id):
         "skipped": skipped,
         "total_found": result.get("total", 0),
     })
+
+
+# === 视频下载 API ===
+
+@app.route("/api/video/<int:video_db_id>/download", methods=["POST"])
+def api_download_video(video_db_id):
+    """下载视频（yt-dlp 1080p）"""
+    video = get_video(video_db_id)
+    if not video:
+        return jsonify({"error": "视频不存在"}), 404
+
+    youtube_url = f"https://www.youtube.com/watch?v={video['video_id']}"
+    output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "downloads")
+    os.makedirs(output_dir, exist_ok=True)
+
+    safe_title = "".join(c for c in (video.get("title", "") or video["video_id"])[:60] if c.isalnum() or c in "._- ")
+    output_template = os.path.join(output_dir, f"{safe_title}.%(ext)s")
+
+    cmd = [
+        "yt-dlp", "--no-playlist",
+        "-f", "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
+        "--merge-output-format", "mp4",
+        "-o", output_template,
+        youtube_url,
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        if result.returncode == 0:
+            # Find the downloaded file
+            downloaded_files = [f for f in os.listdir(output_dir) if f.startswith(safe_title)]
+            return jsonify({
+                "success": True,
+                "message": f"下载完成: {', '.join(downloaded_files)}",
+                "path": output_dir,
+                "files": downloaded_files,
+            })
+        else:
+            return jsonify({"error": f"下载失败: {result.stderr[:500]}"}), 500
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "下载超时（10分钟）"}), 500
+    except FileNotFoundError:
+        return jsonify({"error": "yt-dlp 未安装，请运行: pip install yt-dlp"}), 500
+
+
+@app.route("/api/video/<int:video_db_id>/download-thumbnail", methods=["POST"])
+def api_download_thumbnail(video_db_id):
+    """下载视频封面（最高分辨率）"""
+    video = get_video(video_db_id)
+    if not video:
+        return jsonify({"error": "视频不存在"}), 404
+
+    youtube_url = f"https://www.youtube.com/watch?v={video['video_id']}"
+    output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "downloads", "thumbnails")
+    os.makedirs(output_dir, exist_ok=True)
+
+    safe_title = "".join(c for c in (video.get("title", "") or video["video_id"])[:60] if c.isalnum() or c in "._- ")
+    output_template = os.path.join(output_dir, f"{safe_title}.%(ext)s")
+
+    cmd = [
+        "yt-dlp", "--no-playlist",
+        "--write-thumbnail", "--skip-download",
+        "--convert-thumbnails", "jpg",
+        "-o", output_template,
+        youtube_url,
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        if result.returncode == 0:
+            downloaded_files = [f for f in os.listdir(output_dir) if f.startswith(safe_title)]
+            return jsonify({
+                "success": True,
+                "message": f"封面下载完成: {', '.join(downloaded_files)}",
+                "path": output_dir,
+                "files": downloaded_files,
+            })
+        else:
+            return jsonify({"error": f"封面下载失败: {result.stderr[:300]}"}), 500
+    except FileNotFoundError:
+        return jsonify({"error": "yt-dlp 未安装"}), 500
+
+
+@app.route("/api/video/<int:video_db_id>/download-subtitle", methods=["POST"])
+def api_download_subtitle(video_db_id):
+    """获取 ASS 字幕文件信息"""
+    video = get_video(video_db_id)
+    if not video:
+        return jsonify({"error": "视频不存在"}), 404
+
+    youtube_url = f"https://www.youtube.com/watch?v={video['video_id']}"
+    output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "downloads", "subtitles")
+    os.makedirs(output_dir, exist_ok=True)
+
+    safe_title = "".join(c for c in (video.get("title", "") or video["video_id"])[:60] if c.isalnum() or c in "._- ")
+    output_template = os.path.join(output_dir, f"{safe_title}.%(ext)s")
+
+    # List available subtitles
+    cmd_list = ["yt-dlp", "--no-playlist", "--list-subs", youtube_url]
+    try:
+        result = subprocess.run(cmd_list, capture_output=True, text=True, timeout=30)
+        available_subs = result.stdout if result.returncode == 0 else ""
+    except Exception:
+        available_subs = ""
+
+    # Download auto-generated subtitles
+    cmd = [
+        "yt-dlp", "--no-playlist",
+        "--write-auto-sub", "--sub-lang", "en",
+        "--sub-format", "ass/srt/best",
+        "--skip-download",
+        "-o", output_template,
+        youtube_url,
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        if result.returncode == 0:
+            downloaded_files = [f for f in os.listdir(output_dir) if f.startswith(safe_title)]
+            return jsonify({
+                "success": True,
+                "message": f"字幕下载完成: {', '.join(downloaded_files)}",
+                "path": output_dir,
+                "files": downloaded_files,
+                "available": available_subs[:1000],
+            })
+        else:
+            return jsonify({"error": f"字幕下载失败: {result.stderr[:300]}"}), 500
+    except FileNotFoundError:
+        return jsonify({"error": "yt-dlp 未安装"}), 500
 
 
 # === 统计 API ===

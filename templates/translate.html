@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}翻译管理 - YT 翻译待译库{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2><i class="bi bi-translate"></i> 翻译管理</h2>
+    <small class="text-muted">管理翻译工作流：下载视频 → 获取字幕 → 断句 → 翻译 → 校对</small>
+</div>
+
+<!-- 工作流说明 -->
+<div class="card mb-4">
+    <div class="card-body">
+        <h6><i class="bi bi-diagram-3"></i> 翻译工作流</h6>
+        <div class="d-flex flex-wrap gap-2 align-items-center mt-2">
+            <span class="badge bg-secondary p-2">1. 搜索入库</span>
+            <i class="bi bi-arrow-right"></i>
+            <span class="badge bg-success p-2">2. 下载视频/封面</span>
+            <i class="bi bi-arrow-right"></i>
+            <span class="badge bg-info p-2">3. 获取字幕</span>
+            <i class="bi bi-arrow-right"></i>
+            <span class="badge bg-primary p-2">4. LLM 断句</span>
+            <i class="bi bi-arrow-right"></i>
+            <span class="badge bg-warning text-dark p-2">5. LLM 翻译</span>
+            <i class="bi bi-arrow-right"></i>
+            <span class="badge bg-danger p-2">6. 审核校对</span>
+            <i class="bi bi-arrow-right"></i>
+            <span class="badge bg-dark p-2">7. 嵌字发布</span>
+        </div>
+        <p class="text-muted small mt-2 mb-0">
+            <i class="bi bi-info-circle"></i>
+            在视频详情页中可以执行下载视频、下载封面、获取字幕、LLM 断句等操作。
+            <code>subtitle_translator.py</code> 提供完整的 LLM 翻译+审核功能。
+        </p>
+    </div>
+</div>
+
+<!-- 待翻译 -->
+<div class="card mb-4">
+    <div class="card-body">
+        <h5><i class="bi bi-hourglass-split text-secondary"></i> 待翻译 ({{ pending_videos|length }})</h5>
+        {% if pending_videos %}
+        <div class="table-responsive mt-3">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th style="width:60px;">缩略图</th>
+                        <th>标题</th>
+                        <th>频道</th>
+                        <th>时长</th>
+                        <th>字幕</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for v in pending_videos %}
+                    <tr>
+                        <td>
+                            {% if v.thumbnail_url %}
+                            <img src="{{ v.thumbnail_url }}" style="width:60px;height:34px;object-fit:cover;border-radius:4px;">
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('video_detail', video_db_id=v.id) }}" class="text-decoration-none">
+                                {{ v.title[:60] }}{% if v.title|length > 60 %}...{% endif %}
+                            </a>
+                        </td>
+                        <td class="text-muted small">{{ v.channel_name }}</td>
+                        <td class="text-muted small">{{ v.duration }}</td>
+                        <td>
+                            {% if v.subtitle_downloaded %}
+                            <span class="badge bg-success">已获取</span>
+                            {% else %}
+                            <span class="badge bg-secondary">未获取</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('video_detail', video_db_id=v.id) }}" class="btn btn-outline-primary btn-sm">
+                                <i class="bi bi-pencil"></i> 处理
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted text-center py-3">暂无待翻译视频</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 翻译中 -->
+<div class="card mb-4">
+    <div class="card-body">
+        <h5><i class="bi bi-arrow-repeat text-warning"></i> 翻译中 ({{ translating_videos|length }})</h5>
+        {% if translating_videos %}
+        <div class="table-responsive mt-3">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th style="width:60px;">缩略图</th>
+                        <th>标题</th>
+                        <th>频道</th>
+                        <th>字幕</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for v in translating_videos %}
+                    <tr>
+                        <td>
+                            {% if v.thumbnail_url %}
+                            <img src="{{ v.thumbnail_url }}" style="width:60px;height:34px;object-fit:cover;border-radius:4px;">
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('video_detail', video_db_id=v.id) }}" class="text-decoration-none">
+                                {{ v.title[:60] }}{% if v.title|length > 60 %}...{% endif %}
+                            </a>
+                        </td>
+                        <td class="text-muted small">{{ v.channel_name }}</td>
+                        <td>
+                            {% if v.subtitle_downloaded %}
+                            <span class="badge bg-success">已获取</span>
+                            {% else %}
+                            <span class="badge bg-secondary">未获取</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('video_detail', video_db_id=v.id) }}" class="btn btn-outline-primary btn-sm">
+                                <i class="bi bi-pencil"></i> 继续
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted text-center py-3">暂无翻译中的视频</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 已翻译 -->
+<div class="card mb-4">
+    <div class="card-body">
+        <h5><i class="bi bi-check-circle text-info"></i> 已翻译 ({{ translated_videos|length }})</h5>
+        {% if translated_videos %}
+        <div class="table-responsive mt-3">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th style="width:60px;">缩略图</th>
+                        <th>标题</th>
+                        <th>频道</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for v in translated_videos %}
+                    <tr>
+                        <td>
+                            {% if v.thumbnail_url %}
+                            <img src="{{ v.thumbnail_url }}" style="width:60px;height:34px;object-fit:cover;border-radius:4px;">
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('video_detail', video_db_id=v.id) }}" class="text-decoration-none">
+                                {{ v.title[:60] }}{% if v.title|length > 60 %}...{% endif %}
+                            </a>
+                        </td>
+                        <td class="text-muted small">{{ v.channel_name }}</td>
+                        <td>
+                            <a href="{{ url_for('video_detail', video_db_id=v.id) }}" class="btn btn-outline-primary btn-sm">
+                                <i class="bi bi-eye"></i> 查看
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted text-center py-3">暂无已翻译视频</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 命令行翻译提示 -->
+<div class="card">
+    <div class="card-body">
+        <h5><i class="bi bi-terminal"></i> 命令行翻译</h5>
+        <p class="text-muted">对于完整的 ASS 字幕翻译（含术语提取、两遍翻译、审校），使用命令行：</p>
+        <div class="bg-dark text-light p-3 rounded" style="font-family:monospace;font-size:0.85rem;">
+            <div class="text-success"># 测试 API</div>
+            <div>python subtitle_translator.py test-api</div>
+            <br>
+            <div class="text-success"># 下载视频</div>
+            <div>python subtitle_translator.py download "https://youtube.com/watch?v=xxx"</div>
+            <br>
+            <div class="text-success"># 翻译 ASS 字幕</div>
+            <div>python subtitle_translator.py optimize "path/to/subtitle.ass"</div>
+            <br>
+            <div class="text-success"># 跳过审校（加快速度）</div>
+            <div>python subtitle_translator.py optimize "subtitle.ass" --no-review</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
